@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>アプリみっけ｜URL分析 × サムネプロンプト生成</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green-deep:  #1a5c3a;
+    --green-main:  #2e8b57;
+    --green-mid:   #3aaa6e;
+    --green-light: #5ecb8e;
+    --green-pale:  #e8f7ee;
+    --green-bg:    #f2faf5;
+    --white:       #ffffff;
+    --text:        #1a3028;
+    --text-muted:  #4a7a60;
+    --border:      #b0dcc0;
+    --border-soft: #d4eedd;
+    --radius:      14px;
+    --mono:        'DM Mono', monospace;
+    --sans:        'Zen Kaku Gothic New', sans-serif;
+    --shadow:      0 2px 14px rgba(46,139,87,0.13);
+    --shadow-md:   0 4px 28px rgba(46,139,87,0.18);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--green-bg); color: var(--text); font-family: var(--sans); min-height: 100vh; padding: 0 0 80px; font-size: 16px; }
+
+  header {
+    background: linear-gradient(135deg, var(--green-deep) 0%, var(--green-main) 60%, var(--green-mid) 100%);
+    padding: 36px 24px 30px; text-align: center; position: relative; overflow: hidden;
+  }
+  header::before {
+    content: ''; position: absolute; top: -80px; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 300px;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  header::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 4px;
+    background: linear-gradient(90deg, transparent, #a0e8c0, #ffffff, #a0e8c0, transparent);
+  }
+  .header-badge {
+    display: inline-block; background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.45);
+    color: #fff; font-size: 12px; letter-spacing: 0.16em; padding: 5px 16px;
+    border-radius: 20px; margin-bottom: 14px; font-family: var(--mono);
+  }
+  h1 { font-size: clamp(24px,6vw,36px); font-weight: 900; color: #fff; line-height: 1.2; text-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+  h1 span { background: linear-gradient(90deg,#c8f5da,#fff,#c8f5da); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  .header-sub { margin-top: 10px; color: rgba(255,255,255,0.75); font-size: 14px; }
+
+  .main { max-width: 800px; margin: 0 auto; padding: 32px 16px 0; }
+  .section-label { font-size: 12px; letter-spacing: 0.12em; color: var(--green-main); font-family: var(--mono); margin-bottom: 10px; text-transform: uppercase; font-weight: 700; }
+  .card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 26px; margin-bottom: 18px; box-shadow: var(--shadow); }
+  .field { margin-bottom: 20px; }
+  .field:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 14px; font-weight: 700; color: var(--text-muted); margin-bottom: 7px; }
+  label .req { color: #e05a2b; margin-left: 4px; }
+  label .note { font-size: 12px; font-weight: 400; color: #8abba0; margin-left: 6px; }
+  input[type="text"], textarea {
+    width: 100%; background: var(--green-bg); border: 1.5px solid var(--border);
+    border-radius: 9px; color: var(--text); font-family: var(--sans); font-size: 16px;
+    padding: 13px 15px; outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  input[type="text"]:focus, textarea:focus { border-color: var(--green-main); box-shadow: 0 0 0 3px rgba(46,139,87,0.15); background: #fff; }
+  textarea { resize: vertical; min-height: 70px; }
+  ::placeholder { color: #8abba0; font-size: 14px; }
+
+  /* URL入力エリア */
+  .url-row { display: flex; gap: 10px; margin-bottom: 14px; }
+  .url-row input { flex: 1; }
+  .analyze-btn {
+    background: linear-gradient(135deg, var(--green-deep), var(--green-main));
+    border: none; border-radius: 9px; color: #fff; cursor: pointer;
+    font-family: var(--sans); font-size: 15px; font-weight: 700;
+    padding: 0 22px; white-space: nowrap; transition: all 0.2s;
+    box-shadow: 0 2px 10px rgba(46,139,87,0.3);
+  }
+  .analyze-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+  .analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .status-msg { font-size: 13px; color: var(--text-muted); min-height: 20px; margin-bottom: 10px; font-family: var(--mono); }
+
+  /* 分析結果アコーディオン */
+  .analysis-result { display: none; background: var(--green-pale); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 20px; margin-top: 16px; }
+  .analysis-result.visible { display: block; }
+  .analysis-result h3 { font-size: 13px; color: var(--green-deep); font-family: var(--mono); letter-spacing: 0.1em; margin-bottom: 14px; font-weight: 700; }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  @media (max-width: 560px) { .result-grid { grid-template-columns: 1fr; } }
+  .result-item { background: #fff; border: 1px solid var(--border-soft); border-radius: 9px; padding: 12px 14px; }
+  .result-item .r-label { font-size: 11px; color: var(--text-muted); font-family: var(--mono); letter-spacing: 0.08em; margin-bottom: 5px; }
+  .result-item .r-value { font-size: 14px; color: var(--text); line-height: 1.7; white-space: pre-wrap; }
+  .result-item.full { grid-column: 1 / -1; }
+  .result-item .r-value.large { font-size: 17px; font-weight: 700; color: var(--green-deep); }
+  .result-copy-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .mini-copy-btn {
+    background: none; border: 1.5px solid var(--border); border-radius: 8px;
+    color: var(--text-muted); cursor: pointer; font-family: var(--sans); font-size: 12px;
+    padding: 6px 14px; transition: all 0.15s;
+  }
+  .mini-copy-btn:hover { border-color: var(--green-main); color: var(--green-deep); background: #fff; }
+
+  /* ボタングループ */
+  .btn-group { display: flex; flex-wrap: wrap; gap: 9px; }
+  .btn-choice {
+    background: var(--green-bg); border: 1.5px solid var(--border); border-radius: 9px;
+    color: var(--text-muted); cursor: pointer; font-family: var(--sans); font-size: 14px;
+    padding: 9px 15px; transition: all 0.15s; user-select: none; line-height: 1.3;
+  }
+  .btn-choice:hover { border-color: var(--green-main); color: var(--green-deep); background: var(--green-pale); }
+  .btn-choice.active { background: linear-gradient(135deg, var(--green-main), var(--green-mid)); border-color: var(--green-main); color: #fff; font-weight: 700; box-shadow: 0 2px 8px rgba(46,139,87,0.3); }
+  .btn-media { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 14px; }
+  .btn-media .btn-label { font-size: 14px; font-weight: 700; }
+  .btn-media .btn-ar { font-family: var(--mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em; }
+  .btn-choice.active .btn-ar { color: rgba(255,255,255,0.8); }
+
+  .color-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  input[type="color"] { width: 52px; height: 52px; border: 2px solid var(--border); border-radius: 9px; cursor: pointer; padding: 2px; background: var(--green-bg); }
+  .hex-input { flex: 1; min-width: 120px; max-width: 180px; font-family: var(--mono); font-size: 15px; }
+  .color-presets { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .color-preset { width: 36px; height: 36px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; transition: transform 0.15s, border-color 0.15s; }
+  .color-preset:hover { transform: scale(1.15); border-color: var(--green-main); }
+  .grad-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .grad-btn { background: var(--green-bg); border: 1.5px solid var(--border); border-radius: 8px; color: var(--text-muted); cursor: pointer; font-family: var(--sans); font-size: 13px; padding: 7px 13px; transition: all 0.15s; }
+  .grad-btn.active { background: var(--green-main); border-color: var(--green-main); color: #fff; font-weight: 700; }
+  .divider { height: 1.5px; background: var(--border-soft); margin: 20px 0; }
+  .text-placement-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  @media (max-width: 560px) { .text-placement-grid { grid-template-columns: 1fr; } }
+  .text-placement-grid .field { margin-bottom: 0; }
+
+  .generate-btn {
+    width: 100%; background: linear-gradient(135deg, var(--green-deep) 0%, var(--green-main) 50%, var(--green-mid) 100%);
+    background-size: 200% 100%; border: none; border-radius: var(--radius); color: #fff;
+    cursor: pointer; font-family: var(--sans); font-size: 18px; font-weight: 900;
+    letter-spacing: 0.05em; padding: 20px; transition: background-position 0.4s, transform 0.15s, box-shadow 0.2s;
+    margin-bottom: 26px; box-shadow: 0 4px 20px rgba(46,139,87,0.35); text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .generate-btn:hover { background-position: right center; transform: translateY(-2px); box-shadow: 0 6px 28px rgba(46,139,87,0.45); }
+  .generate-btn:active { transform: translateY(0); }
+
+  #output-area { display: none; }
+  #output-area.visible { display: block; }
+  .output-label { font-size: 12px; letter-spacing: 0.12em; color: var(--green-main); font-family: var(--mono); margin-bottom: 10px; text-transform: uppercase; font-weight: 700; }
+  .tab-wrap { border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-md); margin-bottom: 18px; }
+  .tabs { display: flex; border-bottom: 2px solid var(--border); background: var(--green-pale); }
+  .tab-btn { background: none; border: none; border-bottom: 3px solid transparent; color: var(--text-muted); cursor: pointer; font-family: var(--sans); font-size: 14px; font-weight: 700; padding: 13px 22px; transition: all 0.15s; margin-bottom: -2px; }
+  .tab-btn.active { border-bottom-color: var(--green-main); color: var(--green-deep); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+  .prompt-box { background: #fff; border: 1.5px solid var(--border); border-top: none; padding: 22px; }
+  .prompt-text { font-family: var(--mono); font-size: 13px; line-height: 1.9; color: var(--text); white-space: pre-wrap; word-break: break-all; margin-bottom: 18px; min-height: 90px; background: var(--green-bg); border: 1.5px solid var(--border-soft); border-radius: 9px; padding: 16px; }
+  .copy-btn { background: linear-gradient(135deg, var(--green-main), var(--green-mid)); border: none; border-radius: 9px; color: #fff; cursor: pointer; font-family: var(--sans); font-size: 14px; font-weight: 700; padding: 10px 22px; transition: all 0.2s; box-shadow: 0 2px 8px rgba(46,139,87,0.3); }
+  .copy-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+
+  /* 分析テキスト出力ボックス */
+  .analysis-output { background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius); padding: 22px; margin-bottom: 18px; box-shadow: var(--shadow); }
+  .analysis-output h3 { font-size: 13px; color: var(--green-deep); font-family: var(--mono); letter-spacing: 0.1em; margin-bottom: 16px; font-weight: 700; }
+  .ao-item { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border-soft); }
+  .ao-item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .ao-label { font-size: 11px; color: var(--green-main); font-family: var(--mono); letter-spacing: 0.1em; margin-bottom: 4px; font-weight: 700; }
+  .ao-value { font-size: 14px; color: var(--text); line-height: 1.8; white-space: pre-wrap; }
+  .ao-copy { display: inline-block; margin-top: 6px; font-size: 12px; color: var(--text-muted); border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; cursor: pointer; background: transparent; font-family: var(--sans); transition: all 0.15s; }
+  .ao-copy:hover { border-color: var(--green-main); color: var(--green-deep); background: var(--green-pale); }
+
+  .hint-box { background: #fff; border: 1.5px solid var(--border); border-left: 5px solid var(--green-main); border-radius: 9px; padding: 16px 18px; margin-top: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.9; box-shadow: var(--shadow); }
+  .hint-box strong { color: var(--green-deep); }
+  footer { text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 52px; font-family: var(--mono); letter-spacing: 0.08em; }
+  footer span { color: var(--green-main); font-weight: 700; }
+
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; align-items: center; justify-content: center; padding: 16px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #fff; border: 2.5px solid var(--green-main); border-radius: 18px; box-shadow: 0 10px 50px rgba(0,0,0,0.25); max-width: 640px; width: 100%; padding: 28px; }
+  .modal-title { font-size: 17px; font-weight: 900; color: var(--green-deep); margin-bottom: 5px; }
+  .modal-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6; }
+  .modal-textarea { width: 100%; background: var(--green-bg); border: 1.5px solid var(--border); border-radius: 9px; color: var(--text); font-family: var(--mono); font-size: 12.5px; line-height: 1.8; padding: 14px; resize: none; height: 260px; outline: none; }
+  .modal-textarea:focus { border-color: var(--green-main); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; flex-wrap: wrap; }
+  .modal-copy-btn { background: linear-gradient(135deg, var(--green-main), var(--green-mid)); border: none; border-radius: 9px; color: #fff; cursor: pointer; font-family: var(--sans); font-size: 15px; font-weight: 900; padding: 11px 28px; transition: all 0.2s; box-shadow: 0 2px 10px rgba(46,139,87,0.35); }
+  .modal-copy-btn:hover { opacity: 0.88; }
+  .modal-copy-btn.done { background: #4caf50; }
+  .modal-close-btn { background: none; border: 1.5px solid var(--border); border-radius: 9px; color: var(--text-muted); cursor: pointer; font-family: var(--sans); font-size: 15px; padding: 11px 22px; transition: border-color 0.2s; }
+  .modal-close-btn:hover { border-color: var(--green-main); color: var(--green-deep); }
+</style>
+</head>
+<body>
+
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <p class="modal-title">📋 プロンプトを確認・コピー</p>
+    <p class="modal-sub">内容を確認してから「全選択してコピー」を押してください。<br>MidJourneyの /imagine にそのまま貼り付けてご使用ください。</p>
+    <textarea class="modal-textarea" id="modal-text" readonly></textarea>
+    <div class="modal-actions">
+      <button class="modal-close-btn" onclick="closeModal()">閉じる</button>
+      <button class="modal-copy-btn" id="modal-copy-btn" onclick="doCopy()">📋 全選択してコピー</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="header-badge">🔍 URL ANALYZE × 🖼 THUMBNAIL GENERATOR</div>
+  <h1>アプリ<span>みっけ</span></h1>
+  <p class="header-sub">URLを入れるだけ｜企画文案からサムネプロンプトまで一気に完成</p>
+</header>
+
+<div class="main">
+
+  <!-- STEP 1：URL分析 -->
+  <p class="section-label">🔍 STEP 1｜URLで自動分析</p>
+  <div class="card">
+    <div class="field">
+      <label>アプリ・サービスのURLを入力<span class="req">*</span><span class="note">AIがページを読んで自動入力します</span></label>
+      <div class="url-row">
+        <input type="text" id="url-input" placeholder="https://..." />
+        <button class="analyze-btn" id="analyze-btn" onclick="analyzeUrl()">🔍 分析する</button>
+      </div>
+      <div class="status-msg" id="status-msg"></div>
+    </div>
+
+    <!-- 分析結果 -->
+    <div class="analysis-result" id="analysis-result">
+      <h3>✅ AI分析結果 — 以下の内容が自動入力されました</h3>
+      <div class="result-grid">
+        <div class="result-item">
+          <div class="r-label">CATCH COPY</div>
+          <div class="r-value large" id="r-catch"></div>
+        </div>
+        <div class="result-item">
+          <div class="r-label">TARGET USER</div>
+          <div class="r-value" id="r-target"></div>
+        </div>
+        <div class="result-item full">
+          <div class="r-label">CONCEPT（200字）</div>
+          <div class="r-value" id="r-concept"></div>
+        </div>
+        <div class="result-item">
+          <div class="r-label">PROBLEMS（課題3つ）</div>
+          <div class="r-value" id="r-problems"></div>
+        </div>
+        <div class="result-item">
+          <div class="r-label">DIFFERENCE（差別化）</div>
+          <div class="r-value" id="r-diff"></div>
+        </div>
+        <div class="result-item full">
+          <div class="r-label">SNS紹介文（X / Instagram）</div>
+          <div class="r-value" id="r-sns"></div>
+          <button class="mini-copy-btn" onclick="miniCopy('r-sns', this)">📋 SNS文をコピー</button>
+        </div>
+        <div class="result-item full">
+          <div class="r-label">LP ファーストビュー 見出し案（3パターン）</div>
+          <div class="r-value" id="r-lp"></div>
+          <button class="mini-copy-btn" onclick="miniCopy('r-lp', this)">📋 LP見出しをコピー</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="field">
+      <label>アプリ名・サービス名<span class="req">*</span><span class="note">分析後に自動入力。手動修正もOK</span></label>
+      <input type="text" id="app-name" placeholder="例：経営みっけ、節税みっけ Pro">
+    </div>
+    <div class="field">
+      <label>キャッチコピー<span class="req">*</span><span class="note">サムネ中央に入るメインメッセージ</span></label>
+      <input type="text" id="catch" placeholder="例：365日未来を変える思考習慣アプリ">
+    </div>
+    <div class="field">
+      <label>URL・サイト名<span class="note">任意</span></label>
+      <input type="text" id="app-url" placeholder="例：spc-jp.github.io/mirai365">
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <p class="section-label">🎨 STEP 2｜スタイル・テイスト</p>
+  <div class="card">
+    <div class="btn-group" id="style-group">
+      <button class="btn-choice active" data-val="futuristic modern AI design, clean digital aesthetic, innovative">テック・未来系</button>
+      <button class="btn-choice" data-val="modern business design, clean professional layout, corporate style">ビジネス系</button>
+      <button class="btn-choice" data-val="warm natural design, organic texture, earthy tones, cozy atmosphere">ナチュラル系</button>
+      <button class="btn-choice" data-val="pop art style, vibrant bold colors, playful energetic composition">ポップ・カラフル</button>
+      <button class="btn-choice" data-val="luxury premium design, elegant dark background, gold accent, refined">高級・ラグジュアリー</button>
+      <button class="btn-choice" data-val="retro vintage design, nostalgic 80s aesthetic, aged texture, warm tone">レトロ・ヴィンテージ</button>
+      <button class="btn-choice" data-val="Studio Ghibli style, hand-drawn manga illustration, watercolor wash, soft pastel tones, whimsical Miyazaki-inspired, detailed warm background">ジブリ・漫画風</button>
+      <button class="btn-choice" data-val="anime illustration style, cel-shaded, vibrant anime color palette, dynamic composition">アニメ・イラスト系</button>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <p class="section-label">🎨 STEP 3｜背景カラー設定</p>
+  <div class="card">
+    <div class="field">
+      <label>メインカラーを選ぶ<span class="note">グラデーションのベース色</span></label>
+      <div class="color-row">
+        <input type="color" id="color-picker" value="#13A7E9" oninput="syncColorFromPicker()">
+        <input type="text" id="hex-input" class="hex-input" value="#13A7E9" placeholder="#000000" oninput="syncColorFromHex()" maxlength="7">
+        <span style="font-size:13px;color:var(--text-muted);">← クリックで色を選択 または HEX直接入力</span>
+      </div>
+      <div class="color-presets">
+        <div class="color-preset" style="background:#13A7E9;" data-hex="#13A7E9" title="スカイブルー" onclick="applyPreset(this)"></div>
+        <div class="color-preset" style="background:#225AD3;" data-hex="#225AD3" title="ロイヤルブルー" onclick="applyPreset(this)"></div>
+        <div class="color-preset" style="background:#2e8b57;" data-hex="#2e8b57" title="グリーン" onclick="applyPreset(this)"></div>
+        <div class="color-preset" style="background:#9b27af;" data-hex="#9b27af" title="パープル" onclick="applyPreset(this)"></div>
+        <div class="color-preset" style="background:#e65c00;" data-hex="#e65c00" title="オレンジ" onclick="applyPreset(this)"></div>
+        <div class="color-preset" style="background:#c0392b;" data-hex="#c0392b" title="レッド" onclick="applyPreset(this)"></div>
+        <div class="color-preset" style="background:#1a1a2e;" data-hex="#1a1a2e" title="ダークネイビー" onclick="applyPreset(this)"></div>
+        <div class="color-preset" style="background:#d4a017;" data-hex="#d4a017" title="ゴールド" onclick="applyPreset(this)"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label>グラデーション方向</label>
+      <div class="grad-row">
+        <button class="grad-btn active" data-val="expanding from light to deeper, center to edge gradient">中央→外側（放射）</button>
+        <button class="grad-btn" data-val="top to bottom gradient, light at top deeper at bottom">上→下</button>
+        <button class="grad-btn" data-val="left to right gradient, light on left deeper on right">左→右</button>
+        <button class="grad-btn" data-val="diagonal gradient from top-left to bottom-right">斜め（左上→右下）</button>
+        <button class="grad-btn" data-val="flat solid background, no gradient">グラデーションなし</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 4 -->
+  <p class="section-label">🖼 STEP 4｜メインビジュアル</p>
+  <div class="card">
+    <div class="field">
+      <label>中心に置くビジュアル<span class="req">*</span></label>
+      <div class="btn-group" id="visual-group">
+        <button class="btn-choice" data-val="centered smartphone mockup showing app UI with dates and checklists, screen glow">スマホ画面（アプリUI）</button>
+        <button class="btn-choice" data-val="centered laptop mockup showing dashboard UI, professional screen display">PCモニター（ダッシュボード）</button>
+        <button class="btn-choice active" data-val="abstract glowing geometric shapes, light orbs, dynamic visual elements">抽象的な光・図形</button>
+        <button class="btn-choice" data-val="clean data visualization, glowing charts and graphs, business analytics visual">グラフ・チャート</button>
+        <button class="btn-choice" data-val="product hero shot, centered product photography, studio lighting, clean shadow">商品・プロダクト</button>
+        <button class="btn-choice" data-val="confident middle-aged Japanese man, trustworthy smile, Japanese facial features, professional appearance, business attire">男性（信頼感・日本人）</button>
+        <button class="btn-choice" data-val="young Japanese woman, cheerful expression, Japanese facial features, natural makeup, friendly smile, professional">女性（明るい・日本人）</button>
+        <button class="btn-choice" data-val="large bold text as hero element, typographic design, text-centered layout, clean white typography">テキスト・ロゴ中心</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 5 -->
+  <p class="section-label">✨ STEP 5｜エフェクト・演出</p>
+  <div class="card">
+    <div class="btn-group" id="effect-group">
+      <button class="btn-choice active" data-val="glowing lines extending forward representing future growth and time flow, light streaks">グローライン（未来・成長感）</button>
+      <button class="btn-choice" data-val="floating light particles, bokeh dots, sparkling atmosphere, magical glow">光の粒子・ボケ</button>
+      <button class="btn-choice" data-val="smooth flowing gradient waves, fluid motion blur, dynamic energy lines">グラデーション波</button>
+      <button class="btn-choice" data-val="radiant light burst from center, sunray effect, dramatic lens flare">放射光・レンズフレア</button>
+      <button class="btn-choice" data-val="subtle grid pattern overlay, tech mesh lines, blueprint aesthetic">テックグリッド</button>
+      <button class="btn-choice" data-val="no special effects, clean minimal background">エフェクトなし</button>
+    </div>
+  </div>
+
+  <!-- STEP 6 -->
+  <p class="section-label">💬 STEP 6｜画面内テキスト配置</p>
+  <div class="card">
+    <div class="text-placement-grid">
+      <div class="field">
+        <label>上部テキスト<span class="note">アプリ名など</span></label>
+        <input type="text" id="text-top" placeholder="例：アプリみっけ">
+      </div>
+      <div class="field">
+        <label>中央テキスト<span class="note">キャッチ・メイン</span></label>
+        <input type="text" id="text-center" placeholder="例：URLだけで全部できる">
+      </div>
+      <div class="field">
+        <label>下部テキスト<span class="note">URL・補足</span></label>
+        <input type="text" id="text-bottom" placeholder="例：spc-jp.github.io">
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="field">
+      <label>文字カラー</label>
+      <div class="btn-group" id="typo-group">
+        <button class="btn-choice active" data-val="clean white typography, bright readable text">白文字</button>
+        <button class="btn-choice" data-val="bold black typography, high contrast text">黒文字</button>
+        <button class="btn-choice" data-val="gold colored typography, metallic golden text, premium feel">ゴールド文字</button>
+        <button class="btn-choice" data-val="gradient typography, colorful text with gradient overlay">グラデーション文字</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 7 -->
+  <p class="section-label">📐 STEP 7｜雰囲気・媒体</p>
+  <div class="card">
+    <div class="field">
+      <label>全体の雰囲気ワード</label>
+      <div class="btn-group" id="mood-group">
+        <button class="btn-choice active" data-val="clean and hopeful atmosphere, fresh and innovative style">クリーン・希望感</button>
+        <button class="btn-choice" data-val="powerful and energetic atmosphere, bold dynamic style">パワフル・エネルギッシュ</button>
+        <button class="btn-choice" data-val="calm and trustworthy atmosphere, professional reliable style">落ち着き・信頼感</button>
+        <button class="btn-choice" data-val="warm and friendly atmosphere, approachable inviting style">温かみ・親しみやすさ</button>
+        <button class="btn-choice" data-val="mysterious and premium atmosphere, dark luxurious style">神秘・高級感</button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="field">
+      <label>使う媒体</label>
+      <div class="btn-group" id="media-group">
+        <button class="btn-choice btn-media active" data-val="--ar 16:9">
+          <span class="btn-label">📺 YouTube</span>
+          <span class="btn-ar">16:9（横長）</span>
+        </button>
+        <button class="btn-choice btn-media" data-val="--ar 1:1">
+          <span class="btn-label">📸 Instagram正方形</span>
+          <span class="btn-ar">1:1（正方形）</span>
+        </button>
+        <button class="btn-choice btn-media" data-val="--ar 9:16">
+          <span class="btn-label">📱 リール・縦型</span>
+          <span class="btn-ar">9:16（縦長）</span>
+        </button>
+        <button class="btn-choice btn-media" data-val="--ar 1.91:1">
+          <span class="btn-label">📝 note・OGP</span>
+          <span class="btn-ar">1.91:1（横長）</span>
+        </button>
+        <button class="btn-choice btn-media" data-val="--ar 2:1">
+          <span class="btn-label">💬 LINEバナー</span>
+          <span class="btn-ar">2:1（横長）</span>
+        </button>
+        <button class="btn-choice btn-media" data-val="--ar 4:3">
+          <span class="btn-label">📊 プレゼン・資料</span>
+          <span class="btn-ar">4:3（スライド）</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <button class="generate-btn" onclick="generate()">🚀 企画文案 ＋ サムネプロンプトを生成する</button>
+
+  <!-- 出力エリア -->
+  <div id="output-area">
+
+    <!-- 分析テキスト出力 -->
+    <p class="output-label">📝 OUTPUT 1｜企画・マーケティング文案</p>
+    <div class="analysis-output" id="analysis-output" style="display:none;">
+      <h3>✦ AI分析テキスト一式</h3>
+      <div class="ao-item">
+        <div class="ao-label">CONCEPT（コンセプト 200字）</div>
+        <div class="ao-value" id="ao-concept"></div>
+        <button class="ao-copy" onclick="aoCopy('ao-concept', this)">📋 コピー</button>
+      </div>
+      <div class="ao-item">
+        <div class="ao-label">TARGET（ターゲットユーザー）</div>
+        <div class="ao-value" id="ao-target"></div>
+      </div>
+      <div class="ao-item">
+        <div class="ao-label">PROBLEMS（解決している課題）</div>
+        <div class="ao-value" id="ao-problems"></div>
+      </div>
+      <div class="ao-item">
+        <div class="ao-label">DIFFERENCE（競合との差別化）</div>
+        <div class="ao-value" id="ao-diff"></div>
+      </div>
+      <div class="ao-item">
+        <div class="ao-label">SNS紹介文（X / Instagram）</div>
+        <div class="ao-value" id="ao-sns"></div>
+        <button class="ao-copy" onclick="aoCopy('ao-sns', this)">📋 コピー</button>
+      </div>
+      <div class="ao-item">
+        <div class="ao-label">LP ファーストビュー 見出し案（3パターン）</div>
+        <div class="ao-value" id="ao-lp"></div>
+        <button class="ao-copy" onclick="aoCopy('ao-lp', this)">📋 コピー</button>
+      </div>
+    </div>
+    <div id="no-analysis-msg" style="display:none; font-size:13px; color:var(--text-muted); margin-bottom:18px; font-family:var(--mono);">
+      ※ URL分析を行うと、ここに企画文案が表示されます
+    </div>
+
+    <!-- MJプロンプト出力 -->
+    <p class="output-label">🖼 OUTPUT 2｜MidJourney プロンプト</p>
+    <div class="tab-wrap">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('mj', this)">🟢 MidJourney V8</button>
+        <button class="tab-btn" onclick="switchTab('niji', this)">🟣 Nijijourney</button>
+      </div>
+      <div id="tab-mj" class="tab-pane active">
+        <div class="prompt-box">
+          <div class="prompt-text" id="prompt-mj"></div>
+          <button class="copy-btn" onclick="openModal('prompt-mj')">📋 コピーする</button>
+        </div>
+      </div>
+      <div id="tab-niji" class="tab-pane">
+        <div class="prompt-box">
+          <div class="prompt-text" id="prompt-niji"></div>
+          <button class="copy-btn" onclick="openModal('prompt-niji')">📋 コピーする</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hint-box">
+      <strong>💡 MidJourney V8 活用のコツ</strong><br>
+      --stylize 200〜400：ジブリ・ナチュラル系など柔らかい仕上がりに<br>
+      --stylize 500〜800：テック・ビジネス系などインパクト重視に<br>
+      --chaos 10〜20：バリエーションが欲しいときに追加<br>
+      気に入った画像は U1〜U4 でアップスケールしてからダウンロード
+    </div>
+  </div>
+
+  <footer>
+    <p><span>アプリみっけ</span>｜Powered by Smile Plus Consulting</p>
+    <p style="margin-top:6px;">考えるを、ひとりにしない。</p>
+  </footer>
+</div>
+
+<script>
+  // ── ボタングループ初期化 ──
+  ['style-group','visual-group','effect-group','typo-group','mood-group','media-group'].forEach(id => {
+    document.querySelectorAll(`#${id} .btn-choice`).forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll(`#${id} .btn-choice`).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  });
+  document.querySelectorAll('.grad-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.grad-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  function getActive(id) {
+    const el = document.querySelector(`#${id} .btn-choice.active`);
+    return el ? el.dataset.val : '';
+  }
+  function getGrad() {
+    const el = document.querySelector('.grad-btn.active');
+    return el ? el.dataset.val : '';
+  }
+
+  // ── カラー同期 ──
+  function syncColorFromPicker() {
+    document.getElementById('hex-input').value = document.getElementById('color-picker').value;
+  }
+  function syncColorFromHex() {
+    const v = document.getElementById('hex-input').value;
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById('color-picker').value = v;
+  }
+  function applyPreset(el) {
+    const hex = el.dataset.hex;
+    document.getElementById('color-picker').value = hex;
+    document.getElementById('hex-input').value = hex;
+  }
+
+  // ── URL分析 ──
+  let analysisData = null;
+
+  function extractJson(text) {
+    // まず { } で囲まれたブロックを正規表現で取り出す
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      try { return JSON.parse(match[0]); } catch(e) {}
+    }
+    return null;
+  }
+
+  async function analyzeUrl() {
+    const url = document.getElementById('url-input').value.trim();
+    if (!url || !url.startsWith('http')) {
+      setStatus('URLを正しく入力してください（https://から）');
+      return;
+    }
+    const btn = document.getElementById('analyze-btn');
+    btn.disabled = true;
+    document.getElementById('analysis-result').classList.remove('visible');
+    setStatus('🔍 ページを読みに行っています...');
+
+    const prompt = `次のURLのWebアプリ・サービスについて調査・分析して、必ず以下のJSON形式のみで回答してください。
+URLにアクセスできない場合でも、URLから読み取れる情報や一般的な知識をもとに推測して、必ずJSON形式で出力してください。
+説明文・前置き・マークダウン記号（バッククォートなど）は一切含めず、JSONオブジェクトのみ出力すること。
+
+URL: ${url}
+
+出力形式（このJSONのみ返すこと）:
+{"appName":"サービス名10文字以内","catch":"キャッチコピー15文字以内","concept":"アプリコンセプト200文字前後","target":"ターゲットユーザー像2〜3行","problems":"・課題1\n・課題2\n・課題3","diff":"競合との差別化2〜3行","sns":"SNS紹介文150文字前後 #ハッシュタグ","lp":"①見出し案1\n②見出し案2\n③見出し案3"}`;
+
+    try {
+      setStatus('🤖 AIが分析中です...');
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      const data = await res.json();
+      const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+      const clean = text.replace(/```json|```/g, '').trim();
+      const json = extractJson(clean);
+      if (!json) throw new Error('JSON取得失敗: ' + clean.slice(0, 80));
+      analysisData = json;
+
+      // 分析結果を表示
+      document.getElementById('r-catch').textContent    = json.catch    || '';
+      document.getElementById('r-target').textContent   = json.target   || '';
+      document.getElementById('r-concept').textContent  = json.concept  || '';
+      document.getElementById('r-problems').textContent = json.problems || '';
+      document.getElementById('r-diff').textContent     = json.diff     || '';
+      document.getElementById('r-sns').textContent      = json.sns      || '';
+      document.getElementById('r-lp').textContent       = json.lp       || '';
+
+      // 基本情報フィールドに自動入力
+      if (json.appName) document.getElementById('app-name').value = json.appName;
+      if (json.catch)   document.getElementById('catch').value    = json.catch;
+      document.getElementById('app-url').value = url.replace('https://','').replace('http://','');
+
+      // テキスト配置にも自動入力
+      if (json.appName) document.getElementById('text-top').value    = json.appName;
+      if (json.catch)   document.getElementById('text-center').value = json.catch;
+      document.getElementById('text-bottom').value = url.replace('https://','').replace('http://','').split('/')[0];
+
+      document.getElementById('analysis-result').classList.add('visible');
+      setStatus('✅ 分析完了！基本情報を自動入力しました。内容を確認してSTEP 2へ進んでください。');
+    } catch (e) {
+      setStatus('❌ 分析できませんでした。URLが公開ページか確認するか、アプリ名・キャッチを手動入力してSTEP 2へ進んでください。');
+      console.error(e);
+    }
+    btn.disabled = false;
+  }
+
+  function setStatus(msg) {
+    document.getElementById('status-msg').textContent = msg;
+  }
+
+  // ── プロンプト生成 ──
+  function generate() {
+    const appName    = document.getElementById('app-name').value.trim();
+    const catchCopy  = document.getElementById('catch').value.trim();
+    const textTop    = document.getElementById('text-top').value.trim();
+    const textCenter = document.getElementById('text-center').value.trim();
+    const textBottom = document.getElementById('text-bottom').value.trim();
+    const hexColor   = document.getElementById('hex-input').value.trim() || '#13A7E9';
+
+    if (!appName || !catchCopy) {
+      alert('アプリ名とキャッチコピーを入力してください 😊\n（URLを分析するか、手動で入力してください）');
+      return;
+    }
+
+    const style  = getActive('style-group');
+    const visual = getActive('visual-group');
+    const effect = getActive('effect-group');
+    const typo   = getActive('typo-group');
+    const mood   = getActive('mood-group');
+    const ar     = getActive('media-group');
+    const grad   = getGrad();
+
+    let textBlock = '';
+    if (textTop)    textBlock += `top text "${textTop}", `;
+    if (textCenter) textBlock += `center text "${textCenter}", `;
+    if (textBottom) textBlock += `bottom text "${textBottom}", `;
+    if (textBlock)  textBlock = textBlock.replace(/, $/, '');
+
+    const mjPrompt =
+`${style}, bright gradient background based on ${hexColor} ${grad},
+${visual},
+${effect},
+${mood},
+${textBlock ? textBlock + ',' : ''}
+${typo},
+minimal composition with whitespace, sharp depth of field, 8K resolution,
+highly detailed, ultra-realistic render, award-winning thumbnail design
+${ar} --v 6.1 --stylize 600 --q 2`;
+
+    const nijiStyle = style.includes('Ghibli') ? style : style.replace('modern AI design','illustrated anime visual').replace('corporate','illustrated');
+    const nijiPrompt =
+`${nijiStyle}, soft gradient background in ${hexColor} tones ${grad},
+${visual.replace('ultra-realistic','illustrated').replace('photography','illustration')},
+${effect},
+${mood},
+${textBlock ? textBlock + ',' : ''}
+${typo},
+clean illustrated composition, manga cover style, vibrant illustration
+${ar} --niji 6 --stylize 400`;
+
+    document.getElementById('prompt-mj').textContent   = mjPrompt.replace(/\n{2,}/g,'\n');
+    document.getElementById('prompt-niji').textContent = nijiPrompt.replace(/\n{2,}/g,'\n');
+
+    // 分析テキスト出力
+    if (analysisData) {
+      document.getElementById('ao-concept').textContent  = analysisData.concept  || '';
+      document.getElementById('ao-target').textContent   = analysisData.target   || '';
+      document.getElementById('ao-problems').textContent = analysisData.problems || '';
+      document.getElementById('ao-diff').textContent     = analysisData.diff     || '';
+      document.getElementById('ao-sns').textContent      = analysisData.sns      || '';
+      document.getElementById('ao-lp').textContent       = analysisData.lp       || '';
+      document.getElementById('analysis-output').style.display = 'block';
+      document.getElementById('no-analysis-msg').style.display = 'none';
+    } else {
+      document.getElementById('analysis-output').style.display = 'none';
+      document.getElementById('no-analysis-msg').style.display = 'block';
+    }
+
+    const out = document.getElementById('output-area');
+    out.classList.add('visible');
+    setTimeout(() => out.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }
+
+  // ── タブ切り替え ──
+  function switchTab(id, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById(`tab-${id}`).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  // ── 各種コピー ──
+  function miniCopy(id, btn) {
+    const t = document.getElementById(id).textContent;
+    navigator.clipboard.writeText(t).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = '✅ コピーしました！';
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    });
+  }
+  function aoCopy(id, btn) {
+    const t = document.getElementById(id).textContent;
+    navigator.clipboard.writeText(t).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = '✅ コピーしました！';
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    });
+  }
+
+  // ── モーダルコピー ──
+  function openModal(promptId) {
+    const text = document.getElementById(promptId).textContent;
+    document.getElementById('modal-text').value = text;
+    const btn = document.getElementById('modal-copy-btn');
+    btn.textContent = '📋 全選択してコピー';
+    btn.classList.remove('done');
+    document.getElementById('modal-overlay').classList.add('open');
+    setTimeout(() => { const ta = document.getElementById('modal-text'); ta.focus(); ta.select(); }, 100);
+  }
+  function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+  function closeModalOutside(e) { if (e.target === document.getElementById('modal-overlay')) closeModal(); }
+  function doCopy() {
+    const ta = document.getElementById('modal-text');
+    ta.select(); ta.setSelectionRange(0, 99999);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ta.value).then(showCopied).catch(() => { document.execCommand('copy'); showCopied(); });
+    } else { document.execCommand('copy'); showCopied(); }
+  }
+  function showCopied() {
+    const btn = document.getElementById('modal-copy-btn');
+    btn.textContent = '✅ コピーしました！'; btn.classList.add('done');
+    setTimeout(() => { btn.textContent = '📋 全選択してコピー'; btn.classList.remove('done'); closeModal(); }, 1500);
+  }
+
+  // URL入力でEnterキー対応
+  document.getElementById('url-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') analyzeUrl();
+  });
+</script>
+</body>
+</html>
