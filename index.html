@@ -423,15 +423,11 @@
     </div>
   </div>
 
-  <button class="generate-btn" onclick="generate()">🚀 企画文案 ＋ サムネプロンプトを生成する</button>
-
-  <!-- 出力エリア -->
-  <div id="output-area">
-
-    <!-- 分析テキスト出力 -->
+  <!-- OUTPUT 1：企画文案（URL分析直後に表示・生成ボタンとは独立） -->
+  <div id="analysis-output-wrap" style="display:none;">
     <p class="output-label">📝 OUTPUT 1｜企画・マーケティング文案</p>
-    <div class="analysis-output" id="analysis-output" style="display:none;">
-      <h3>✦ AI分析テキスト一式</h3>
+    <div class="analysis-output">
+      <h3>✦ AI分析テキスト一式 — コピーしてそのまま使えます</h3>
       <div class="ao-item">
         <div class="ao-label">CONCEPT（コンセプト 200字）</div>
         <div class="ao-value" id="ao-concept"></div>
@@ -460,11 +456,19 @@
         <button class="ao-copy" onclick="aoCopy('ao-lp', this)">📋 コピー</button>
       </div>
     </div>
-    <div id="no-analysis-msg" style="display:none; font-size:13px; color:var(--text-muted); margin-bottom:18px; font-family:var(--mono);">
-      ※ URL分析を行うと、ここに企画文案が表示されます
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+      <button class="generate-btn" style="flex:1;min-width:200px;margin-bottom:0;font-size:15px;padding:14px;" onclick="copyAllAnalysis()">📋 OUTPUT 1 をすべてコピー</button>
+      <div id="copy-all-confirm" style="display:none;background:var(--green-pale);border:1.5px solid var(--green-main);border-radius:9px;padding:10px 18px;font-size:14px;color:var(--green-deep);font-weight:700;">✅ コピーしました！</div>
     </div>
+    <div style="background:var(--green-pale);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:18px;font-size:14px;color:var(--green-deep);">
+      ⬇️ 続けてSTEP 2〜7を設定し、サムネのMidJourneyプロンプトも生成できます
+    </div>
+  </div>
 
-    <!-- MJプロンプト出力 -->
+  <button class="generate-btn" onclick="generate()">🖼 サムネプロンプトを生成する</button>
+
+  <!-- OUTPUT 2：MJプロンプト -->
+  <div id="output-area">
     <p class="output-label">🖼 OUTPUT 2｜MidJourney プロンプト</p>
     <div class="tab-wrap">
       <div class="tabs">
@@ -612,7 +616,18 @@ URL: ${url}
       document.getElementById('text-bottom').value = url.replace('https://','').replace('http://','').split('/')[0];
 
       document.getElementById('analysis-result').classList.add('visible');
-      setStatus('✅ 分析完了！基本情報を自動入力しました。内容を確認してSTEP 2へ進んでください。');
+
+      // OUTPUT1を表示
+      document.getElementById('ao-concept').textContent  = json.concept  || '';
+      document.getElementById('ao-target').textContent   = json.target   || '';
+      document.getElementById('ao-problems').textContent = json.problems || '';
+      document.getElementById('ao-diff').textContent     = json.diff     || '';
+      document.getElementById('ao-sns').textContent      = json.sns      || '';
+      document.getElementById('ao-lp').textContent       = json.lp       || '';
+      document.getElementById('analysis-output-wrap').style.display = 'block';
+
+      setStatus('✅ 分析完了！企画文案とサムネ設定を確認してください。');
+      setTimeout(() => document.getElementById('analysis-output-wrap').scrollIntoView({ behavior:'smooth', block:'start' }), 100);
     } catch (e) {
       setStatus('❌ 分析できませんでした。URLが公開ページか確認するか、アプリ名・キャッチを手動入力してSTEP 2へ進んでください。');
       console.error(e);
@@ -677,21 +692,6 @@ ${ar} --niji 6 --stylize 400`;
     document.getElementById('prompt-mj').textContent   = mjPrompt.replace(/\n{2,}/g,'\n');
     document.getElementById('prompt-niji').textContent = nijiPrompt.replace(/\n{2,}/g,'\n');
 
-    // 分析テキスト出力
-    if (analysisData) {
-      document.getElementById('ao-concept').textContent  = analysisData.concept  || '';
-      document.getElementById('ao-target').textContent   = analysisData.target   || '';
-      document.getElementById('ao-problems').textContent = analysisData.problems || '';
-      document.getElementById('ao-diff').textContent     = analysisData.diff     || '';
-      document.getElementById('ao-sns').textContent      = analysisData.sns      || '';
-      document.getElementById('ao-lp').textContent       = analysisData.lp       || '';
-      document.getElementById('analysis-output').style.display = 'block';
-      document.getElementById('no-analysis-msg').style.display = 'none';
-    } else {
-      document.getElementById('analysis-output').style.display = 'none';
-      document.getElementById('no-analysis-msg').style.display = 'block';
-    }
-
     const out = document.getElementById('output-area');
     out.classList.add('visible');
     setTimeout(() => out.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
@@ -703,6 +703,37 @@ ${ar} --niji 6 --stylize 400`;
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
     document.getElementById(`tab-${id}`).classList.add('active');
     btn.classList.add('active');
+  }
+
+  // ── OUTPUT1 すべてコピー ──
+  function copyAllAnalysis() {
+    const fields = [
+      { label: '【コンセプト】', id: 'ao-concept' },
+      { label: '【ターゲットユーザー】', id: 'ao-target' },
+      { label: '【解決している課題】', id: 'ao-problems' },
+      { label: '【競合との差別化】', id: 'ao-diff' },
+      { label: '【SNS紹介文】', id: 'ao-sns' },
+      { label: '【LP見出し案】', id: 'ao-lp' },
+    ];
+    const text = fields.map(f => {
+      const val = document.getElementById(f.id).textContent.trim();
+      return val ? f.label + '\n' + val : '';
+    }).filter(Boolean).join('\n\n');
+
+    if (!text) { alert('先にURL分析を行ってください😊'); return; }
+
+    navigator.clipboard.writeText(text).then(() => {
+      const confirm = document.getElementById('copy-all-confirm');
+      confirm.style.display = 'block';
+      setTimeout(() => { confirm.style.display = 'none'; }, 2500);
+    }).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+      const confirm = document.getElementById('copy-all-confirm');
+      confirm.style.display = 'block';
+      setTimeout(() => { confirm.style.display = 'none'; }, 2500);
+    });
   }
 
   // ── 各種コピー ──
